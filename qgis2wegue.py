@@ -24,6 +24,7 @@
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+from qgis.core import QgsMessageLog, QgsProject, QgsCoordinateReferenceSystem, QgsCoordinateTransform
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -34,6 +35,67 @@ import os.path
 # Import wegue logic
 from .WegueConfiguration import WegueConfiguration
 
+def center2webmercator(center, qgis_instance):
+    """
+    Input the center point of the QGIS canvas.
+    The QGIS instance object, for computing the source CRS
+    and the transformation object.
+    Outputs: The Same point in WebMercator(EPSG:3857)
+    """
+
+    crs_source = qgis_instance.crs()
+
+    # TODO apparentyl QgsCoordinateReferenceSystem is deprecated
+    # define WebMercator(EPSG:3857)
+    crs_destination = QgsCoordinateReferenceSystem(3857)
+
+    # transformation object
+    xform = QgsCoordinateTransform(crs_source,
+                                   crs_destination,
+                                   qgis_instance)
+
+    # forward transformation: src -> dest
+    center_3857 = xform.transform(center)
+    return center_3857
+
+
+def scale2zoom(scale):
+    """
+    Takes the scale from QGIS.
+    Computes the zoom level for webmaps.
+    Only approximation.
+    """
+
+    # Scale to Zoom conversion
+    # taken from https://wiki.openstreetmap.org/wiki/Zoom_levels
+    scale_dict = {
+        500000000: 0,
+        250000000: 1,
+        150000000: 2,
+        70000000: 3,
+        35000000: 4,
+        15000000: 5,
+        10000000: 6,
+        4000000	: 7,
+        2000000	: 8,
+        1000000: 9,
+        500000: 10,
+        250000: 11,
+        150000: 12,
+        70000: 13,
+        35000: 14,
+        15000: 15,
+        8000: 16,
+        4000: 17,
+        2000: 18
+    }
+    scale_list = scale_dict.keys()
+
+    # get closest scale
+    closest_scale = min(scale_list, key=lambda x: abs(x - scale))
+
+    # query respective zoom level
+    return scale_dict[closest_scale]
 
 class qgis2wegue:
     """QGIS Plugin Implementation."""
@@ -194,8 +256,34 @@ class qgis2wegue:
 
         # show the dialog
         self.dlg.show()
+
+
+        # get properties from QGIS project
+        canvas = self.iface.mapCanvas()
+
+        scale = canvas.scale()
+        center = canvas.center()
+
+        qgis_instance = QgsProject.instance() 
+
+        crs_source = qgis_instance.crs()
+        center_3857 = center2webmercator(center, qgis_instance)
+
+        zoom_level = scale2zoom(scale)
+
+        # create Wegue configuration
+        wc = WegueConfiguration()
+
+        # add configuration from project
+        wc.mapZoom = zoom_level
+        wc.mapCenter = (center_3857.x(), center_3857.y())
+
+        wc.add_vector_layer('my vector layer', 'KML', 'www.example.com/vector')
+        wc.add_example_layers()
+
         # Run the dialog event loop
         result = self.dlg.exec_()
+
         # See if OK was pressed
         if result:
             # access file path input widget
@@ -205,7 +293,5 @@ class qgis2wegue:
             # get the path
             user_input = q2w_file_widget.filePath()
             
-            wc = WegueConfiguration()
-            wc.add_vector_layer('my vector layqgis_2_wegue_dialog_baseer', 'KML', 'www.example.com/vector')
-            wc.add_example_layers()
+            # write Wegue config to path
             wc.to_file(user_input)
