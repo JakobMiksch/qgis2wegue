@@ -35,6 +35,7 @@ import os.path
 # Import wegue logic
 from .WegueConfiguration import WegueConfiguration
 
+
 def center2webmercator(center, qgis_instance):
     """
     Input the center point of the QGIS canvas.
@@ -45,7 +46,7 @@ def center2webmercator(center, qgis_instance):
 
     crs_source = qgis_instance.crs()
 
-    # TODO apparentyl QgsCoordinateReferenceSystem is deprecated
+    # TODO apparently QgsCoordinateReferenceSystem is deprecated
     # define WebMercator(EPSG:3857)
     crs_destination = QgsCoordinateReferenceSystem(3857)
 
@@ -97,6 +98,42 @@ def scale2zoom(scale):
     # query respective zoom level
     return scale_dict[closest_scale]
 
+
+def identify_wegue_layer_type(layer):
+    """
+    Matches QGIS layer type to Wegue type
+    Wegue types:
+    - vector
+    - wms
+    - xyz
+    - (osm)
+    """
+
+    wegue_layer_type = 'unknown'
+
+    providerType = layer.providerType()
+    if providerType == 'wms':
+        # TODO: how are WMS and XYZ different?
+        # print('wms or xyz')
+
+        # only works properly with raster
+        # p = parse_qs(layer.source())
+        pass
+
+    elif providerType == 'ogr':
+        # TODO: find out if vector is in "MVT", "GeoJSON", "TopoJSON", "KML"
+
+        name = layer.name()
+        url = layer.source().split('|')[0]
+
+        if(url.endswith('.kml')):
+            wegue_layer_type = 'KML'
+        elif(url.endswith('.json') | url.endswith('.geojson')):
+            wegue_layer_type = 'GeoJSON'
+
+    return wegue_layer_type
+
+
 class qgis2wegue:
     """QGIS Plugin Implementation."""
 
@@ -147,18 +184,17 @@ class qgis2wegue:
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('qgis2wegue', message)
 
-
     def add_action(
-        self,
-        icon_path,
-        text,
-        callback,
-        enabled_flag=True,
-        add_to_menu=True,
-        add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
-        parent=None):
+            self,
+            icon_path,
+            text,
+            callback,
+            enabled_flag=True,
+            add_to_menu=True,
+            add_to_toolbar=True,
+            status_tip=None,
+            whats_this=None,
+            parent=None):
         """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
@@ -235,7 +271,6 @@ class qgis2wegue:
         # will be set False in run()
         self.first_start = True
 
-
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
@@ -244,19 +279,18 @@ class qgis2wegue:
                 action)
             self.iface.removeToolBarIcon(action)
 
-
     def run(self):
         """Run method that performs all the real work"""
 
         # Create the dialog with elements (after translation) and keep reference
-        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start == True:
+        # Only create GUI ONCE in callback, so that it will only load when the
+        # plugin is started
+        if self.first_start:
             self.first_start = False
             self.dlg = qgis2wegueDialog()
 
         # show the dialog
         self.dlg.show()
-
 
         # get properties from QGIS project
         canvas = self.iface.mapCanvas()
@@ -264,9 +298,8 @@ class qgis2wegue:
         scale = canvas.scale()
         center = canvas.center()
 
-        qgis_instance = QgsProject.instance() 
+        qgis_instance = QgsProject.instance()
 
-        crs_source = qgis_instance.crs()
         center_3857 = center2webmercator(center, qgis_instance)
 
         zoom_level = scale2zoom(scale)
@@ -278,8 +311,19 @@ class qgis2wegue:
         wc.mapZoom = zoom_level
         wc.mapCenter = (center_3857.x(), center_3857.y())
 
-        wc.add_vector_layer('my vector layer', 'KML', 'www.example.com/vector')
-        wc.add_example_layers()
+        # add map layers
+        project_layers = qgis_instance.mapLayers()
+        for layer_id in project_layers:
+            layer = project_layers[layer_id]
+            wegue_layer_type = identify_wegue_layer_type(layer)
+
+            if wegue_layer_type in ['GeoJSON', 'KML']:
+                name = layer.name()
+                url = layer.source().split('|')[0]
+                wc.add_vector_layer(name=name,
+                                    format=wegue_layer_type,
+                                    url=url)
+        wc.add_osm_layer()
 
         # Run the dialog event loop
         result = self.dlg.exec_()
@@ -288,10 +332,10 @@ class qgis2wegue:
         if result:
             # access file path input widget
             q2w_file_widget = self.dlg.q2w_file_widget
-            
+
             # TODO: check if path is valid (aka not empty)
             # get the path
             user_input = q2w_file_widget.filePath()
-            
+
             # write Wegue config to path
             wc.to_file(user_input)

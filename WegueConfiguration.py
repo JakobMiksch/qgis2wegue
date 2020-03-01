@@ -115,6 +115,7 @@ class WegueConfiguration:
             lid = self._create_layer_id(name)
 
         osm_conf = {
+            "type": 'OSM',
             "name": name,
             "lid": lid,
             "displayInLayerList": displayInLayerList,
