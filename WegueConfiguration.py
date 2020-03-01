@@ -65,11 +65,32 @@ class WegueConfiguration:
         """
         return self.__dict__
 
+    def _remove_empty_keys(self, conf):
+        # TODO: solve more elegantly
+
+        final_conf = {}
+
+        for key in conf:
+            value = conf[key]
+            if value:
+                final_conf[key] = value
+
+        return final_conf
+
     def to_file(self, path):
         """
         Store Wegue configuration as JSON file
         :param path:
         """
+        
+        # TODO solve more elegantly
+        fixed_layers = []
+        for layer in self.mapLayers:
+            layer = self._remove_empty_keys(layer)
+            fixed_layers.append(layer)
+        
+        self.mapLayers = fixed_layers
+
         with open(path, 'w') as path:
             json.dump(self.__dict__, path, indent=2)
 
