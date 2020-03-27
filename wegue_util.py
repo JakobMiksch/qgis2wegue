@@ -1,7 +1,7 @@
 import re
 from urllib.parse import parse_qs
 from qgis.core import QgsProject, QgsCoordinateTransform
-from qgis.core import QgsCoordinateReferenceSystem
+from qgis.core import QgsCoordinateReferenceSystem, QgsWkbTypes
 from .wegueConfiguration import WegueConfiguration
 
 
@@ -177,6 +177,13 @@ def identify_wegue_layer_type(layer):
             wegue_layer_type = 'GeoJSON'
 
     elif providerType == 'wfs':
+
+        ##################################################
+        import ipdb                                      #
+        from qgis.PyQt.QtCore import pyqtRemoveInputHook #
+        pyqtRemoveInputHook()                            #
+        ipdb.set_trace()                                 #
+        ##################################################
 
         wegue_layer_type = 'WFS'
 
