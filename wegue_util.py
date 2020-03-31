@@ -3,6 +3,7 @@ from urllib.parse import parse_qs
 from qgis.core import QgsProject, QgsCoordinateTransform
 from qgis.core import QgsCoordinateReferenceSystem, QgsWkbTypes
 from .wegueConfiguration import WegueConfiguration
+from owslib.wms import WebMapService
 
 
 def create_wegue_conf_from_qgis(canvas):
@@ -48,10 +49,17 @@ def create_wegue_conf_from_qgis(canvas):
                                 geometryTypeName=geometry_type_name)
 
         elif wegue_layer_type == 'WMS':
-            layers = re.search(r"layers=(.*?)(?:&|$)", source).groups(0)[0]
-            url = get_wms_getmap_url(layer)
 
-            wc.add_wms_layer(name, layers, url)
+            d = parse_qs(source)
+
+            url_get_capabilities = d['url'][0]
+            layers = d['layers'][0]
+
+            # request getMap URL via OWSLib
+            wms = WebMapService(url_get_capabilities)
+            url_get_map = wms.getOperationByName('GetMap').methods[0]['url']
+
+            wc.add_wms_layer(name, layers, url_get_map)
 
         elif wegue_layer_type == 'XYZ':
 
@@ -183,31 +191,6 @@ def identify_wegue_layer_type(layer):
         wegue_layer_type = 'WFS'
 
     return wegue_layer_type
-
-
-def get_wms_getmap_url(wmsLayer):
-    """
-    Detects the Get-Map URL for a QGIS WMS layer
-    """
-
-    wms_getmap_url = None
-
-    # derive WMS GetMap URL from layer metdata
-    htmlMetadata = wmsLayer.htmlMetadata()
-    match = re.search(
-        r'GetMapUrl<\/td><td>(.*)<\/td><\/tr><tr><td>GetFeatureInfoUrl',
-        htmlMetadata)
-
-    if match:
-        layersGroup = match.groups(0)
-        wms_getmap_url = ''.join(layersGroup)
-
-    else:
-        wms_getmap_url = re.search(r"url=(.*?)(?:&|$)",
-                                   wmsLayer.source()).groups(0)[0]
-
-    return wms_getmap_url
-
 
 def get_wfs_properties(source):
     """
